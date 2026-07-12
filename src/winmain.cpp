@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <windows.h>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -88,6 +89,7 @@ static constexpr wchar_t FLAG_HELP[] = L"--help";
 
 static constexpr wchar_t FLAG_UUZIP[] = L"-unzipTo";
 static constexpr wchar_t FLAG_CLEANUP[] = L"-clean";
+static constexpr wchar_t FLAG_MOVEFOLDER[] = L"-moveFolder";
 
 static constexpr wchar_t FLAG_INFOURL[] = L"-infoUrl=";
 static constexpr wchar_t FLAG_FORCEDOMAIN[] = L"-forceDomain=";
@@ -164,13 +166,21 @@ gup [-vVERSION_VALUE] [-infoUrl=URL] [-chkCertKeyId=CERT_KEYID]\r\n\
 \r\n\
 Download & unzip mode:\r\n\
 \r\n\
-gup -clean FOLDER_TO_ACTION\r\n\
-gup -unzipTo [-clean] FOLDER_TO_ACTION ZIP_URL\r\n\
+gup -clean APP_PATH FOLDER_TO_ACTION\r\n\
+gup -unzipTo [-clean] APP_PATH FOLDER_TO_ACTION ZIP_URL\r\n\
 \r\n\
     -clean : Delete all files in FOLDER_TO_ACTION.\r\n\
     -unzipTo : Download zip file from ZIP_URL then unzip it into FOLDER_TO_ACTION.\r\n\
+    APP_PATH: application path to launch after the operation.\r\n\
     ZIP_URL : The URL to download zip file.\r\n\
     FOLDER_TO_ACTION : The folder where we clean or/and unzip to.\r\n\
+\r\n\
+Move folder mode:\r\n\
+\r\n\
+gup -moveFolder APP_PATH SRC_ROOT DEST_ROOT folderName1 [folderName2 ...]\r\n\
+\r\n\
+    -moveFolder: Move the given folder names from SRC_ROOT to DEST_ROOT.\r\n\
+    APP_PATH: application path to launch after the operation.\r\n\
 	";
 
 HFONT hCmdLineEditFont = nullptr;
@@ -506,6 +516,36 @@ bool deleteFileOrFolder(const wstring& f2delete)
 
 	delete[] actionFolder;
 	return (res == 0);
+};
+
+// Moves a file or folder using std::filesystem::rename.
+// If overwriteIfExists is true and fTo already exists, fTo is removed first:
+// fs::rename (like the underlying Win32 MoveFileEx) is unable to replace a
+// non-empty directory, so an explicit removal is required before the rename
+// (plugin folders normally contain a .dll and other resources, so they are
+// non-empty in practice).
+// Conflict resolution (asking the user Yes/No/Yes to all/No to all) is expected
+// to happen upstream (in Notepad++, before it exits and launches gup), since
+// gup itself runs headless after the host application has already closed.
+bool moveFileOrFolder(const wstring& fFrom, const wstring& fTo, bool overwriteIfExists)
+{
+	namespace fs = std::filesystem;
+	std::error_code ec;
+
+	if (overwriteIfExists && fs::exists(fTo, ec))
+	{
+		fs::remove_all(fTo, ec);
+		ec.clear();
+	}
+
+	fs::rename(fFrom, fTo, ec);
+	if (ec)
+	{
+		WRITE_LOG(GUP_LOG_FILENAME, L"moveFileOrFolder, fs::rename failed with error code: ", std::to_wstring(ec.value()).c_str());
+		return false;
+	}
+
+	return true;
 };
 
 
@@ -1320,6 +1360,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
 	bool isHelp = isInList(FLAG_HELP, params);
 	bool isCleanUp = isInList(FLAG_CLEANUP, params);
 	bool isUnzip = isInList(FLAG_UUZIP, params);
+	bool isMoveFolder = isInList(FLAG_MOVEFOLDER, params);
 	
 	getParamVal('v', params, version);
 	getParamVal('p', params, customParam);
@@ -1512,7 +1553,65 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
 
 		return 0;
 	}
-	
+
+	// move folder(s) from SRC_ROOT to DEST_ROOT
+	// gup.exe -moveFolder "appPath2Launch" "src_root" "dest_root" "fold1" "fold2" ...
+	if (isMoveFolder)
+	{
+		if (nbParam < 4)
+		{
+			WRITE_LOG(GUP_LOG_FILENAME, L"-1 in plugin updater's part - if (isMoveFolder): ", L"nbParam < 4");
+			return -1;
+		}
+
+		wstring prog2Launch = params[0];
+		wstring srcRoot = params[1];
+		wstring destRoot = params[2];
+
+#ifdef _DEBUG
+		// Don't check any thing in debug mode
+#else
+		// Check signature of the launched program, with the same certif as gup.exe
+		SecurityGuard securityGuard4PluginsInstall;
+
+		if (!securityGuard4PluginsInstall.initFromSelfCertif())
+		{
+			securityGuard.writeSecurityError(L"Above certificate init error from \"gup -moveFolder\" (move folder)", L"");
+			return -1;
+		}
+
+		bool isSecured = securityGuard4PluginsInstall.verifySignedBinary(prog2Launch.c_str());
+		if (!isSecured)
+		{
+			securityGuard.writeSecurityError(L"Above certificate verification error from \"gup -moveFolder\" (move folder)", L"");
+			return -1;
+		}
+#endif
+
+		if (!::PathFileExists(destRoot.c_str()))
+		{
+			::CreateDirectory(destRoot.c_str(), NULL);
+		}
+
+		for (size_t i = 3; i < nbParam; ++i)
+		{
+			wstring srcPath = srcRoot;
+			::PathAppend(srcPath, params[i]);
+
+			wstring destPath = destRoot;
+			::PathAppend(destPath, params[i]);
+
+			// Overwrite conflicts are already resolved by the caller (Notepad++) before
+			// invoking gup: every folder name reaching this point has been confirmed by
+			// the user, so it is safe (and necessary) to overwrite an existing destination.
+			moveFileOrFolder(srcPath, destPath, true);
+		}
+
+		safeLaunchAsUser(prog2Launch);
+
+		return 0;
+	}
+
 	// update:
 	// gup.exe -unzip -clean "appPath2Launch" "dest_folder" "pluginFolderName1 http://pluginFolderName1/pluginFolderName1.zip sha256Hash1" "pluginFolderName2 http://pluginFolderName2/pluginFolderName2.zip sha256Hash2" "plugin Folder Name3 http://plugin_Folder_Name3/plugin_Folder_Name3.zip sha256Hash3"
 	// gup.exe -unzip -clean "c:\npp\notepad++.exe" "c:\donho\notepad++\plugins" "toto http://toto/toto.zip 7c31a97b..." "ti et ti http://ti_ti/ti_ti.zip 087a0591..." "tata http://tata/tata.zip 2e9766c..."
