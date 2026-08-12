@@ -55,8 +55,8 @@ public:
 	SecurityGuard(){};
 	bool initFromSelfCertif();
 
-	bool verifySignatureAndGetInfo(const std::wstring& codeSigedBinPath, std::wstring& display_name, std::wstring& key_id_hex, std::wstring& subject, std::wstring& authority_key_id_hex);
-	bool verifySignedBinary(const std::wstring& filepath);
+	bool verifySignatureAndGetInfo(const std::wstring& codeSigedBinPath, std::wstring& display_name, std::wstring& key_id_hex, std::wstring& subject, std::wstring& authority_key_id_hex) const;
+	bool verifySignedBinary(const std::wstring& filepath) const;
 	
 	void enableChkRevoc() { _doCheckRevocation = true; }
 	void enableChkTrustChain() { _doCheckChainOfTrust = true; }
@@ -71,7 +71,7 @@ public:
 
 	void writeSecurityError(const std::wstring& prefix, const std::wstring& log2write) const;
 
-	bool verifyXmlSignature(const std::string& xmlData, const std::wstring& trustedThumbprint = L"");
+	bool verifyXmlSignature(const std::string& xmlData, const std::wstring& trustedThumbprint = L"") const;
 
 private:
 	// Code signing certificate
@@ -85,8 +85,8 @@ private:
 	bool _doCheckChainOfTrust = false;
 
 	// For xml signature verification
-	bool verifyXmlTrustedCertificate(PCCERT_CONTEXT pCertContext, const std::wstring& expectedThumbprint = L"");
-	bool verifyXmlCertificate(PCCERT_CONTEXT pCertContext);
+	bool verifyXmlTrustedCertificate(PCCERT_CONTEXT pCertContext, const std::wstring& expectedThumbprint = L"") const;
+	bool verifyXmlCertificate(PCCERT_CONTEXT pCertContext) const;
 
 	std::wstring _errLogPath = L"%LOCALAPPDATA%\\WinGUp\\log\\securityError.log"; // By default, but overrideable
 };

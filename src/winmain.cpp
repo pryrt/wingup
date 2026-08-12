@@ -1197,16 +1197,33 @@ bool getUpdateInfo(const string& info2get, const GupParameters& gupParams, const
 	return true;
 }
 
-int runInstaller(const wstring& app2runPath, const wstring& binWindowsClassName, const wstring& closeMsg, const wstring& closeMsgTitle)
+int runInstaller(const wstring& app2runPath, const wstring& binWindowsClassName, const wstring& closeMsg, const wstring& closeMsgTitle, bool doCheckSignature, const SecurityGuard& securityGuard)
 {
+	// Lock the downloaded binary to prevent write/modification during user interaction
+	HANDLE hLockedFile = ::CreateFileW(
+		app2runPath.c_str(),
+		GENERIC_READ,
+		FILE_SHARE_READ, // Deny write sharing to prevent TOCTOU file swap
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
+
+	if (hLockedFile == INVALID_HANDLE_VALUE)
+	{
+		return (int)ERROR_ACCESS_DENIED;
+	}
+
 	if (!binWindowsClassName.empty())
 	{
 		HWND h = ::FindWindowEx(NULL, NULL, binWindowsClassName.c_str(), NULL);
 		if (h)
 		{
 			int installAnswer = ::MessageBox(h, closeMsg.c_str(), closeMsgTitle.c_str(), MB_YESNO | MB_APPLMODAL);
+
 			if (installAnswer == IDNO)
 			{
+				::CloseHandle(hLockedFile);
 				return (int)NO_ERROR;
 			}
 		}
@@ -1219,8 +1236,51 @@ int runInstaller(const wstring& app2runPath, const wstring& binWindowsClassName,
 		}
 	}
 
+	//
+	// Check the code signing signature again if demanded, for avoiding TOCTOU
+	//
+	if (doCheckSignature)
+	{
+		bool isSecured = securityGuard.verifySignedBinary(app2runPath);
+
+		if (!isSecured)
+		{
+			wstring dlFileSha256;
+
+			std::string content = getFileContentA(ws2s(app2runPath).c_str());
+			if (content.empty())
+			{
+				dlFileSha256 = L"No SHA-256: the file is empty.";
+			}
+			else
+			{
+				char sha2hashStr[65]{};
+				uint8_t sha2hash[32];
+				calc_sha_256(sha2hash, reinterpret_cast<const uint8_t*>(content.c_str()), content.length());
+
+				for (size_t i = 0; i < 32; i++)
+				{
+					sprintf(sha2hashStr + i * 2, "%02x", sha2hash[i]);
+				}
+
+				dlFileSha256 = L"Tampered file SHA-256: ";
+				dlFileSha256 += s2ws(sha2hashStr);
+			}
+
+			securityGuard.writeSecurityError(L"The 2nd certificate signature verification failed - you might have TOCTOU problem.", dlFileSha256);
+
+			// Delete the unverified/tampered binary file sitting in the TEMP folder
+			::CloseHandle(hLockedFile);
+			deleteFileOrFolder(app2runPath);
+
+			return -1;
+		}
+	}
+
 	// execute the installer
 	intptr_t result = (intptr_t)::ShellExecute(NULL, L"open", app2runPath.c_str(), nsisSilentInstallParam.c_str(), L".", SW_SHOW);
+	::CloseHandle(hLockedFile);
+
 	if (result <= 32) // There's a problem (Don't ask me why, ask Microsoft)
 	{
 		WRITE_LOG(GUP_LOG_FILENAME, L"runInstaller, ShellExecute failed with error code: ", std::to_wstring(result).c_str());
@@ -1959,6 +2019,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
 				dlUrl += downloadURL;
 
 				securityGuard.writeSecurityError(dlUrl, dlFileSha256);
+
+				// Delete the unverified/tampered binary file sitting in the TEMP folder
+				deleteFileOrFolder(dlDest);
+
 				return -1;
 			}
 		}
@@ -1971,7 +2035,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
 			closeApp = MSGID_CLOSEAPP;
 		msg += closeApp;
 
-		return runInstaller(dlDest, gupParams.getClassName(), msg, gupParams.getMessageBoxTitle().c_str());
+		return runInstaller(dlDest, gupParams.getClassName(), msg, gupParams.getMessageBoxTitle().c_str(), doCheckSignature, securityGuard);
 
 	} catch (exception ex) {
 		if (!isSilentMode)
