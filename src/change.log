@@ -1,3 +1,4 @@
-WinGup (for Notepad++) v5.4.2 new featurs:
+WinGup (for Notepad++) v5.4.3 new featurs:
 
-1. Fix updater path traversal (Zip Slip) issue.
+1. Fix a TOCTOU issue.
+2. Add "-moveFolder" command line option for plugin deactivation in Notepad++.

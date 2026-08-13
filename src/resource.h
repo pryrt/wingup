@@ -19,8 +19,8 @@
 
 #pragma once
 
-#define VERSION_VALUE L"5.42\0"
-#define VERSION_DIGITALVALUE 5, 4, 2, 0
+#define VERSION_VALUE L"5.43\0"
+#define VERSION_DIGITALVALUE 5, 4, 3, 0
 
 #define IDD_PROGRESS_DLG 1001
 #define IDD_PROXY_DLG 1002
