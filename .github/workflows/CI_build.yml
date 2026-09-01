@@ -61,14 +61,14 @@ jobs:
       if: matrix.build_platform == 'x86'
       uses: actions/upload-artifact@v4
       with:
-          name: gup_exe_x86
+          name: gup_exe_Win32
           path: bin\
 
     - name: Archive artifacts for x86 DEBUG
       if: matrix.build_platform == 'x86'
       uses: actions/upload-artifact@v4
       with:
-          name: gup_exe_x86_dbg
+          name: gup_exe_Win32_dbg
           path: bin.dbg\
 
     - name: Archive artifacts for ARM64
@@ -76,4 +76,11 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
           name: gup_exe_arm64
+          path: binarm64\
+
+    - name: Archive artifacts for ARM64 DEBUG
+      if: matrix.build_platform == 'ARM64'
+      uses: actions/upload-artifact@v4
+      with:
+          name: gup_exe_arm64_dbg
           path: binarm64\
