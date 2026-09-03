@@ -49,16 +49,21 @@ jobs:
     - name: build debug zipfile x64
       if: matrix.build_platform == 'x64'
       run: |
-        Compress-Archive -Path ".\vcproj\x64\Debug\*" -DestinationPath gup_dbg_exe_x64.zip
-        dir -Recurse .
+        Compress-Archive -Path ".\vcproj\x64\Debug\*" -DestinationPath "${{ github.workspace }}\gup_dbg_exe_x64.zip"
+        echo "-----1-----"
+        dir .
+        echo "-----2-----"
+        dir ${{ github.workspace }}
+        echo "-----3-----"
         pwd
+        echo "-----4-----"
 
     - name: Store gup_dbg_exe_x64.zip as Release Asset
       uses: svenstaro/upload-release-action@v2
       if: matrix.build_platform == 'x64'
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./gup_dbg_exe_x64.zip
+        file: gup_dbg_exe_x64.zip
         asset_name: gup_dbg_exe_x64.zip
         tag: ${{ github.ref }}
         overwrite: true
