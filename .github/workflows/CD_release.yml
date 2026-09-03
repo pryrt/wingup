@@ -1,5 +1,7 @@
 name: CD_release
-on: release
+on: 
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -46,7 +48,10 @@ jobs:
 
     - name: build debug zipfile x64
       if: matrix.build_platform == 'x64'
-      run: Compress-Archive -Path ".\vcproj\x64\Debug\*" -DestinationPath gup_dbg_exe_x64.zip
+      run: |
+        Compress-Archive -Path ".\vcproj\x64\Debug\*" -DestinationPath gup_dbg_exe_x64.zip
+        dir -Recurse .
+        pwd
 
     - name: Store gup_dbg_exe_x64.zip as Release Asset
       uses: svenstaro/upload-release-action@v2
