@@ -1,14 +1,13 @@
 name: CD_release
-on: 
-  release:
-    types: [published]
+on: release
+
 jobs:
   build:
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
-        build_platform: [x64, x86, ARM64]
+        build_platform: [x64] # [x64, x86, ARM64]
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -46,11 +45,12 @@ jobs:
       run: msbuild GUP.sln /m /p:configuration="Debug" /p:platform="${{ matrix.build_platform }}"
 
     - name: build debug zipfile x64
-      if: github.ref_type == 'tag' && matrix.build_platform == 'x64'
+      if: matrix.build_platform == 'x64'
       run: Compress-Archive -Path ".\vcproj\x64\Debug\*" -DestinationPath gup_dbg_exe_x64.zip
 
     - name: Store gup_dbg_exe_x64.zip as Release Asset
       uses: svenstaro/upload-release-action@v2
+      if: matrix.build_platform == 'x64'
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: ./gup_dbg_exe_x64.zip
@@ -64,6 +64,7 @@ jobs:
       run: Compress-Archive -Path ".\vcproj\Debug\*" -DestinationPath gup_dbg_exe_Win32.zip
 
     - name: Store gup_dbg_exe_Win32.zip as Release Asset
+      if: matrix.build_platform == 'x86'
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -74,10 +75,11 @@ jobs:
         body: ${{ github.event.release.body }}
 
     - name: build debug zipfile ARM64
-      if: matrix.build_platform == 'ARM86'
+      if: matrix.build_platform == 'ARM64'
       run: Compress-Archive -Path ".\vcproj\ARM64\Debug\*" -DestinationPath gup_dbg_exe_ARM64.zip
 
     - name: Store gup_dbg_exe_ARM64.zip as Release Asset
+      if: matrix.build_platform == 'ARM64'
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
