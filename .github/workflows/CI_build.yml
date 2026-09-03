@@ -55,7 +55,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
           name: gup_exe_x64_dbg
-          path: bin64.dbg\
+          path: vcproj\x64\Debug\
 
     - name: Archive artifacts for x86
       if: matrix.build_platform == 'x86'
@@ -69,7 +69,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
           name: gup_exe_x86_dbg
-          path: bin.dbg\
+          path: vcproj\Debug\
 
     - name: Archive artifacts for ARM64
       if: matrix.build_platform == 'ARM64'
@@ -83,4 +83,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
           name: gup_exe_arm64_dbg
-          path: binarm64.dbg\
+          path: vcproj\ARM64\Debug\
